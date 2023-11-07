@@ -1,0 +1,142 @@
+---
+title: "Aabha Latkar 615 Midterm"
+format: html
+editor: visual
+---
+
+
+```{r}
+#installing the libraries and reading in the necessary datasets
+library(readr)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(maps)
+
+#reading in the NOAA datasets for 2020 and 2021
+storm20 <- read.csv("C:/Users/Aabha/Downloads/615Midterm/StormEvents_details-ftp_v1.0_d2020_c20230927 (1).csv.gz")
+storm21 <- read.csv("C:/Users/Aabha/Downloads/615Midterm/StormEvents_details-ftp_v1.0_d2021_c20231017.csv.gz")
+
+#reading in the fatalities dataset from NOAHH for 2020 and 2021
+fata20 <- read.csv("C:/Users/Aabha/Downloads/615Midterm/StormEvents_fatalities-ftp_v1.0_d2020_c20230927.csv.gz")
+fata21 <- read.csv("C:/Users/Aabha/Downloads/615Midterm/StormEvents_fatalities-ftp_v1.0_d2021_c20231017.csv.gz")
+#reading in the FEMA datasets 
+fema1 <- read_csv("DisasterDeclarationsSummaries (1).csv", show_col_types = FALSE)
+fema2 <- read_csv("FemaWebDisasterSummaries (3).csv", show_col_types = FALSE)
+
+
+```
+
+```{r}
+#cleaning of the NOAHH dataset
+#combine the datasets for the two years
+storm <- rbind(storm20, storm21)
+
+#filter out the rows which have floods
+storm <- storm %>%
+  filter(EVENT_TYPE %in% c('Lakeshore Flood', 'Flash Flood', 'Coastal Flood', 'Flood'))
+
+#drop the columns that are not needed 
+storm <- subset(storm, select = -c(MAGNITUDE_TYPE, TOR_F_SCALE, TOR_LENGTH, TOR_WIDTH, TOR_OTHER_WFO, TOR_OTHER_CZ_STATE, TOR_OTHER_CZ_FIPS, TOR_OTHER_CZ_NAME, STATE_FIPS, CZ_TYPE, CZ_FIPS, EPISODE_ID, DATA_SOURCE))
+
+#converting the property and crop damage values in a numeric format
+storm$DAMAGE_PROPERTY <- gsub("K", "", storm$DAMAGE_PROPERTY)
+storm$DAMAGE_PROPERTY <- as.numeric(storm$DAMAGE_PROPERTY)
+storm$DAMAGE_PROPERTY <- round(storm$DAMAGE_PROPERTY)
+storm$DAMAGE_PROPERTY <- storm$DAMAGE_PROPERTY * 1000
+
+storm$DAMAGE_CROPS <- gsub("K", "", storm$DAMAGE_CROPS)
+storm$DAMAGE_CROPS <- as.numeric(storm$DAMAGE_CROPS)
+storm$DAMAGE_CROPS <- round(storm$DAMAGE_CROPS)
+storm$DAMAGE_CROPS <- storm$DAMAGE_CROPS * 1000
+
+#cleaning of the fatalities dataset
+fata <- rbind(fata20, fata21)
+fatalities <- merge(storm, fata, by = "EVENT_ID", all=FALSE)
+```
+
+```{r}
+#Comparing the types of damages done by the different types of floods
+#number of events of each state
+flood <- storm %>% count(EVENT_TYPE)
+
+storm$totaldamage <- rowSums(storm[c("DAMAGE_PROPERTY", "DAMAGE_CROPS")])
+storm$totalpeople <- rowSums(storm[c("DEATHS_INDIRECT", "DEATHS_DIRECT")])
+storm$totalinjuries <- rowSums(storm[c("INJURIES_INDIRECT", "INJURIES_DIRECT")])
+storm1 <- storm %>%
+  filter(totaldamage != 0)
+storm2 <- storm %>%
+  filter(totalinjuries != 0)
+storm3 <- storm %>%
+  filter(totalpeople != 0)
+
+ggplot(storm1, aes(x = STATE, y = totaldamage, fill = EVENT_TYPE)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Damage by Event Type", x = "State", y = "Total Damage") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Set1")
+
+top_12_states <- storm1 %>%
+  arrange(desc(totaldamage)) %>%
+  head(15)
+ggplot(top_12_states, aes(x = reorder(STATE, -totaldamage), y = totaldamage, fill = EVENT_TYPE)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Top 10 States by Damage and Event Type", x = "State", y = "Total Damage") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Set1")
+
+
+ggplot(storm2, aes(x = STATE, y = totalpeople, fill = EVENT_TYPE)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Deaths by Event Type", x = "State", y = "Total Damage") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Set1")
+
+ggplot(storm3, aes(x = STATE, y = totalinjuries, fill = EVENT_TYPE)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Injuries by Event Type", x = "State", y = "Total Damage") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_fill_brewer(palette = "Set1")
+
+
+location <- fatalities$FATALITY_LOCATION
+
+# Create a histogram of age groups
+ggplot() +
+  geom_bar(aes(x = location), fill = "skyblue", color = "black") +
+  labs(title = "Location of Fatality", x = "Location of victim", y = "Frequency")+theme(axis.text.x = element_text(angle = 90)) 
+```
+
+```{r}
+#how long do floods last?
+storm$BEGIN_DATE_TIME <- as.POSIXct(storm$BEGIN_DATE_TIME, format = "%d-%b-%y %H:%M:%S")
+storm$END_DATE_TIME <- as.POSIXct(storm$END_DATE_TIME, format = "%d-%b-%y %H:%M:%S")
+storm$duration <- as.numeric(difftime(storm$END_DATE_TIME, storm$BEGIN_DATE_TIME, units = "hours"))
+storm$duration <- round(storm$duration, digits = 2)
+ggplot(storm, aes(x = EVENT_TYPE, y = duration, color = EVENT_TYPE)) +
+  geom_point() +
+  labs(title = "Duration of Floods by Event Type", x = "Event Type", y = "Duration (Hours)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+
+```{r}
+#cleaning the fema datasets
+FEMA <- merge(fema1, fema2, by = "disasterNumber", all=FALSE)
+
+
+```
+
+
+
+```{r}
+#how much time does it take for victims of floods to get assistance
+distart <- as.Date(FEMA$declarationDate)
+getmoney <- as.Date(FEMA$disasterCloseoutDate)
+
+TIME <- as.numeric(getmoney - distart)
+ggplot(FEMA, aes(x = TIME)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Days between Declaration and Close Dates", x = "Number of Days", y = "Frequency")
+
+```
